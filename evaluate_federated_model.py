@@ -16,7 +16,7 @@ from sklearn.utils import shuffle
 # ------------------- Config -------------------
 DATAPATH = "E Commerce Dataset.xlsx"
 SHEET_NAME = "E Comm"
-DATA_FOLDER = "/home/abdullah/Desktop/MLOPS/Project/TFF/federated_data"
+DATA_FOLDER = "federated_data"
 MODEL_PATH = os.path.join(DATA_FOLDER, "federated_churn_model.h5")
 PREPROCESSOR_PATH = os.path.join(DATA_FOLDER, "preprocessor.pkl")
 BATCH_SIZE = 8

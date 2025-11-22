@@ -1,0 +1,39 @@
+federated-churn-mlops/
+├── .github/
+│   └── workflows/
+│       └── ml_pipeline.yml
+├── k8s/
+│   ├── deployment.yaml
+│   ├── service.yaml
+│   └── hpa.yaml
+├── monitoring/
+│   ├── prometheus.yml
+│   └── grafana/
+├── tests/
+│   ├── test_preprocessing.py
+│   ├── test_api.py
+│   └── test_model.py
+├── federated_data/
+│   ├── client_1_data.pkl
+│   ├── client_2_data.pkl
+│   ├── client_3_data.pkl
+│   ├── federated_churn_model.h5
+│   ├── preprocessor.pkl
+│   └── metadata.json
+├── mlruns/                    # MLflow experiments
+├── prepare_federated_data.py
+├── federated_training.py
+├── federated_training_with_mlflow.py
+├── evaluate_federated_model.py
+├── drift_detection.py
+├── api_server.py
+├── dashboard.py
+├── Dockerfile.training
+├── Dockerfile.serving
+├── docker-compose.yml
+├── requirements.txt
+├── requirements_serving.txt
+├── Report.md
+├── Evaluation_Report.md
+├── E Commerce Dataset.xlsx
+└── README.md

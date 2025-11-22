@@ -1,0 +1,13 @@
+FROM tensorflow/tensorflow:2.14.0
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY prepare_federated_data.py .
+COPY federated_training.py .
+COPY evaluate_federated_model.py .
+COPY E\ Commerce\ Dataset.xlsx .
+
+CMD ["python", "federated_training.py"]

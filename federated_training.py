@@ -7,8 +7,8 @@ import tensorflow as tf
 import tensorflow_federated as tff
 
 # ------------------- Config -------------------
-DATA_FOLDER = "/home/abdullah/Desktop/MLOPS/Project/TFF/federated_data"
-MODEL_SAVE_PATH = "/home/abdullah/Desktop/MLOPS/Project/TFF/federated_data/federated_churn_model.h5"
+DATA_FOLDER = "federated_data"
+MODEL_SAVE_PATH = "federated_data/federated_churn_model.h5"
 BATCH_SIZE = 8
 NUM_ROUNDS = 5
 
