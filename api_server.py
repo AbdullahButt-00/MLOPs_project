@@ -7,7 +7,15 @@ import pandas as pd
 from prometheus_client import Counter, Histogram, make_asgi_app
 import time
 
+import os
+
+MODEL_PATH = os.getenv("MODEL_PATH")
+PREPROCESSOR_PATH = os.getenv("PREPROCESSOR_PATH")
+
 app = FastAPI(title="Federated Churn Prediction API")
+
+
+
 
 # Prometheus metrics
 PREDICTION_COUNTER = Counter('predictions_total', 'Total predictions made')
@@ -15,9 +23,14 @@ PREDICTION_LATENCY = Histogram('prediction_latency_seconds', 'Prediction latency
 CHURN_PREDICTIONS = Counter('churn_predictions', 'Churn predictions', ['label'])
 
 # Load model and preprocessor
-model = tf.keras.models.load_model('model/federated_churn_model.h5')
-with open('model/preprocessor.pkl', 'rb') as f:
+if MODEL_PATH is None or PREPROCESSOR_PATH is None:
+    raise RuntimeError("MODEL_PATH or PREPROCESSOR_PATH environment variable is missing!")
+
+model = tf.keras.models.load_model(MODEL_PATH)
+
+with open(PREPROCESSOR_PATH, "rb") as f:
     preprocessor = pickle.load(f)
+    
 
 class CustomerData(BaseModel):
     Tenure: float
@@ -82,3 +95,10 @@ app.mount("/metrics", metrics_app)
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+
+
+
+
+    

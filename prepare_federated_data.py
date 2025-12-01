@@ -6,7 +6,6 @@ import pickle
 import json
 import pandas as pd
 import numpy as np
-import tensorflow as tf
 import sklearn
 from sklearn.preprocessing import OneHotEncoder, MinMaxScaler
 from sklearn.impute import SimpleImputer
@@ -25,7 +24,6 @@ np.random.seed(RANDOM_STATE)
 
 # ------------------- Helpers -------------------
 def make_onehot_encoder():
-    # use the right kwarg depending on sklearn version (sparse_output added in newer versions)
     try:
         return OneHotEncoder(handle_unknown='ignore', sparse_output=False)
     except TypeError:
@@ -34,13 +32,18 @@ def make_onehot_encoder():
 # ------------------- Load and clean -------------------
 def load_and_clean(path, sheet_name="E Comm"):
     df = pd.read_excel(path, sheet_name=sheet_name)
-    df.loc[df['PreferredLoginDevice'] == 'Phone', 'PreferredLoginDevice'] = 'Mobile Phone'
-    df.loc[df['PreferedOrderCat'] == 'Mobile', 'PreferedOrderCat'] = 'Mobile Phone'
-    df.loc[df['PreferredPaymentMode'] == 'COD', 'PreferredPaymentMode'] = 'Cash on Delivery'
-    df.loc[df['PreferredPaymentMode'] == 'CC', 'PreferredPaymentMode'] = 'Credit Card'
+    # canonicalize some values
+    if 'PreferredLoginDevice' in df.columns:
+        df.loc[df['PreferredLoginDevice'] == 'Phone', 'PreferredLoginDevice'] = 'Mobile Phone'
+    if 'PreferedOrderCat' in df.columns:
+        df.loc[df['PreferedOrderCat'] == 'Mobile', 'PreferedOrderCat'] = 'Mobile Phone'
+    if 'PreferredPaymentMode' in df.columns:
+        df.loc[df['PreferredPaymentMode'] == 'COD', 'PreferredPaymentMode'] = 'Cash on Delivery'
+        df.loc[df['PreferredPaymentMode'] == 'CC', 'PreferredPaymentMode'] = 'Credit Card'
     if 'CustomerID' in df.columns:
         df = df.drop(columns=['CustomerID'])
-    df['Churn'] = df['Churn'].astype(int)
+    if 'Churn' in df.columns:
+        df['Churn'] = df['Churn'].astype(int)
     return df
 
 # ------------------- Preprocessing -------------------
@@ -58,8 +61,47 @@ def build_preprocessor(numeric_cols, categorical_cols):
     preprocessor = ColumnTransformer([
         ('num', numeric_transformer, numeric_cols),
         ('cat', categorical_transformer, categorical_cols)
-    ])
+    ], remainder='drop')
     return preprocessor
+
+def get_transformed_feature_names(preprocessor, numeric_cols, categorical_cols):
+    # numeric names are the same as numeric_cols
+    names = []
+    # ColumnTransformer stores transformers_ after fit
+    for name, trans, cols in preprocessor.transformers_:
+        if name == 'num':
+            names.extend(cols)
+        elif name == 'cat':
+            # `trans` is a Pipeline: ('imputer', SimpleImputer), ('ohe', OneHotEncoder)
+            # find OHE and get categories
+            ohe = None
+            if hasattr(trans, 'named_steps') and 'ohe' in trans.named_steps:
+                ohe = trans.named_steps['ohe']
+            elif hasattr(trans, 'steps') and len(trans.steps) > 0:
+                # fallback
+                for step_name, step in trans.steps:
+                    if hasattr(step, 'get_feature_names_out'):
+                        ohe = step
+                        break
+            if ohe is not None:
+                try:
+                    # sklearn >=1.0
+                    cat_names = ohe.get_feature_names_out(cols).tolist()
+                except Exception:
+                    # fallback older versions: build manually from categories_
+                    cat_names = []
+                    if hasattr(ohe, 'categories_'):
+                        for col, cats in zip(cols, ohe.categories_):
+                            for cat in cats:
+                                cat_names.append(f"{col}__{cat}")
+                    else:
+                        # final fallback: column name only
+                        cat_names = cols
+                names.extend(cat_names)
+            else:
+                # if we can't find ohe, add original categorical names
+                names.extend(cols)
+    return names
 
 def preprocess_node(df_node, preprocessor):
     X = df_node.drop(columns=['Churn'])
@@ -67,19 +109,13 @@ def preprocess_node(df_node, preprocessor):
     X_trans = preprocessor.transform(X)
     return X_trans, y
 
-# ------------------- Convert to TFF dataset -------------------
-def create_tf_dataset(X, y, feature_names=None, batch_size=BATCH_SIZE):
-    # feature_names should match transformed columns; if None, create numeric names
-    if feature_names is None:
-        feature_names = [f"f{i}" for i in range(X.shape[1])]
-    df_features = pd.DataFrame(X, columns=feature_names)
-    ds = tf.data.Dataset.from_tensor_slices((dict(df_features), y))
-    return ds.batch(batch_size)
-
 # ------------------- Main -------------------
 if __name__ == "__main__":
     df = load_and_clean(DATAPATH, SHEET_NAME)
     print("Raw data shape:", df.shape)
+
+    if 'Churn' not in df.columns:
+        raise RuntimeError("Churn column not found in dataset.")
 
     # Use full dataset to build a stable preprocessor (avoids first-client bias)
     X_full = df.drop(columns=['Churn'])
@@ -91,19 +127,18 @@ if __name__ == "__main__":
     preprocessor = build_preprocessor(numeric_cols, categorical_cols)
     preprocessor.fit(X_full)  # fit on entire dataset
 
-    # Try to extract feature names for transformed matrix (useful to reconstruct DataFrame later)
+    # derive transformed feature names (robust)
     try:
-        feature_names = list(preprocessor.get_feature_names_out())
+        transformed_feature_names = get_transformed_feature_names(preprocessor, numeric_cols, categorical_cols)
     except Exception:
-        # fallback: if ColumnTransformer doesn't support get_feature_names_out, leave None
-        feature_names = None
+        transformed_feature_names = None
 
     # Save metadata (sklearn version, original columns, feature names if available)
     metadata = {
         "sklearn_version": sklearn.__version__,
         "numeric_cols": numeric_cols,
         "categorical_cols": categorical_cols,
-        "feature_names": feature_names
+        "transformed_feature_names": transformed_feature_names
     }
     with open(os.path.join(OUTPUT_FOLDER, "metadata.json"), "w") as mf:
         json.dump(metadata, mf)
@@ -120,12 +155,9 @@ if __name__ == "__main__":
             pickle.dump({
                 'X': X_trans,
                 'y': y,
-                'feature_names': feature_names
+                'transformed_feature_names': transformed_feature_names
             }, f)
         print(f"Saved client {idx+1} data -> {file_path}")
-
-        # optional: create and save a small TF dataset example file (not pickling tf.data.Dataset)
-        # if you need TF datasets directly, load the pickle and call create_tf_dataset(...) when building the training loop
 
     # Save the fitted preprocessor (note: require compatible sklearn when loading)
     preproc_path = os.path.join(OUTPUT_FOLDER, "preprocessor.pkl")

@@ -1,3 +1,4 @@
+# Dockerfile.serving
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -5,9 +6,15 @@ WORKDIR /app
 COPY requirements_serving.txt .
 RUN pip install --no-cache-dir -r requirements_serving.txt
 
-COPY federated_data/federated_churn_model.h5 ./model/
-COPY federated_data/preprocessor.pkl ./model/
+# Copy API
 COPY api_server.py .
+
+# Create model directory
+RUN mkdir -p /app/model
+
+# Copy artifacts dynamically
+COPY federated_data/federated_churn_model.h5 /app/model/
+COPY federated_data/preprocessor.pkl /app/model/
 
 EXPOSE 8000
 

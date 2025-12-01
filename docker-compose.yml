@@ -1,6 +1,9 @@
 version: '3.8'
 
 services:
+  # ---------------------------
+  # Training service
+  # ---------------------------
   training:
     build:
       context: .
@@ -13,6 +16,9 @@ services:
     depends_on:
       - mlflow
 
+  # ---------------------------
+  # Model serving API
+  # ---------------------------
   serving:
     build:
       context: .
@@ -23,7 +29,14 @@ services:
       - ./federated_data:/app/model
     environment:
       - MODEL_PATH=/app/model/federated_churn_model.h5
+      - PREPROCESSOR_PATH=/app/model/preprocessor.pkl
+    depends_on:
+      - training
 
+
+  # ---------------------------
+  # MLflow server
+  # ---------------------------
   mlflow:
     image: ghcr.io/mlflow/mlflow:v2.9.2
     ports:
@@ -32,6 +45,9 @@ services:
       - ./mlruns:/mlflow/mlruns
     command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri /mlflow/mlruns
 
+  # ---------------------------
+  # Prometheus monitoring
+  # ---------------------------
   prometheus:
     image: prom/prometheus:latest
     ports:
@@ -39,6 +55,9 @@ services:
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
 
+  # ---------------------------
+  # Grafana monitoring dashboard
+  # ---------------------------
   grafana:
     image: grafana/grafana:latest
     ports:
