@@ -76,28 +76,6 @@ services:
     depends_on:
       - churn-api
 
-  # MLflow (optional, if you want to run it)
-  mlflow:
-    image: ghcr.io/mlflow/mlflow:v2.9.2
-    container_name: mlflow
-    ports:
-      - "5000:5000"
-    command:
-      - mlflow
-      - server
-      - --host
-      - "0.0.0.0"
-      - --port
-      - "5000"
-      - --backend-store-uri
-      - sqlite:///mlflow/mlflow.db
-      - --default-artifact-root
-      - /mlflow/artifacts
-    volumes:
-      - mlflow-data:/mlflow
-    networks:
-      - churn-network
-
 networks:
   churn-network:
     driver: bridge
