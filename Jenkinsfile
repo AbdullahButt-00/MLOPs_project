@@ -203,22 +203,23 @@ exit 1
     }
 }
         
-        stage('Push Docker Images to Minikube') {
-            when {
-                expression { params.FORCE_DEPLOY || currentBuild.result == null }
-            }
-            steps {
-                echo '📤 Loading Docker images into Minikube...'
-                sh '''
-                    # Load images into Minikube
-                    minikube image load churn-preprocess:latest
-                    minikube image load churn-training:latest
-                    minikube image load churn-serving:latest
-                    
-                    echo "✓ Images loaded into Minikube"
-                '''
-            }
-        }
+stage('Build Docker Images') {
+    steps {
+        echo '🐳 Building Docker images directly in Minikube...'
+        sh '''
+            # Point to Minikube's Docker daemon
+            eval $(minikube docker-env)
+            
+            # Build images directly inside Minikube (no load needed!)
+            docker build -t churn-preprocess:latest -f Dockerfile.preprocess .
+            docker build -t churn-training:latest -f Dockerfile.training .
+            docker build -t churn-serving:latest -f Dockerfile.serving .
+            
+            echo "✓ Images built in Minikube - no loading required"
+        '''
+    }
+}
+
         
         stage('Copy Model Data to Minikube') {
             when {
