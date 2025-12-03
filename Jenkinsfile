@@ -199,6 +199,25 @@ stage('Build Docker Images') {
     }
 }
 
+stage('Setup Kubernetes Resources') {
+    steps {
+        echo '☸️ Setting up Kubernetes namespace and storage...'
+        sh '''
+            # Create namespace first
+            kubectl apply -f k8s/namespace.yaml
+            
+            # Create PVC
+            kubectl apply -f k8s/pvc.yaml
+            
+            # Wait for PVC to be ready
+            kubectl wait --for=condition=Bound pvc/model-data-pvc -n churn-prediction --timeout=60s || true
+            
+            echo "✓ Kubernetes resources created"
+        '''
+    }
+}
+
+
         
         stage('Copy Model Data to Minikube') {
             when {
