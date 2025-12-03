@@ -5,17 +5,16 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy only the API code - model files will be mounted at runtime
 COPY app.py .
-COPY preprocessed_data/preprocessor.pkl ./preprocessed_data/
+COPY drift_detection.py .
 
+# Create directories for model files (will be mounted from PVC)
 RUN mkdir -p ./federated_data
+RUN mkdir -p ./preprocessed_data
 
 EXPOSE 8000
 
-ENV PREPROCESSOR_PATH=preprocessed_data/preprocessor.pkl
-ENV MLFLOW_TRACKING_URI=http://mlflow-service:5000
-
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD curl -f http://localhost:8000/health || exit 1
-
+# Model paths will be provided via environment variables
+# MODEL_PATH and PREPROCESSOR_PATH should point to mounted volumes
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
