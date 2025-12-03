@@ -7,6 +7,11 @@ metadata:
     app: churn-api
 spec:
   replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: churn-api
@@ -19,6 +24,41 @@ spec:
         prometheus.io/port: "8000"
         prometheus.io/path: "/metrics"
     spec:
+      # Add init container to verify model files exist
+      initContainers:
+      - name: check-model-files
+        image: busybox
+        command: ['sh', '-c']
+        args:
+          - |
+            echo "Checking for model files..."
+            if [ ! -d "/data/federated_data" ]; then
+              echo "ERROR: /data/federated_data directory not found"
+              exit 1
+            fi
+            if [ ! -d "/data/preprocessed_data" ]; then
+              echo "ERROR: /data/preprocessed_data directory not found"
+              exit 1
+            fi
+            if [ ! -f "/data/federated_data/federated_churn_model.h5" ]; then
+              echo "ERROR: Model file not found at /data/federated_data/federated_churn_model.h5"
+              echo "Available files in /data/federated_data:"
+              ls -la /data/federated_data || true
+              exit 1
+            fi
+            if [ ! -f "/data/preprocessed_data/preprocessor.pkl" ]; then
+              echo "ERROR: Preprocessor file not found at /data/preprocessed_data/preprocessor.pkl"
+              echo "Available files in /data/preprocessed_data:"
+              ls -la /data/preprocessed_data || true
+              exit 1
+            fi
+            echo "✓ All required model files found"
+            echo "Model file size: $(du -h /data/federated_data/federated_churn_model.h5 | cut -f1)"
+            echo "Preprocessor file size: $(du -h /data/preprocessed_data/preprocessor.pkl | cut -f1)"
+        volumeMounts:
+        - name: model-data
+          mountPath: /data
+      
       containers:
       - name: api
         image: churn-serving:latest
@@ -26,35 +66,47 @@ spec:
         ports:
         - containerPort: 8000
           name: http
+          protocol: TCP
         env:
         - name: MODEL_PATH
-          value: "federated_data/federated_churn_model.h5"
+          value: "/app/model_data/federated_data/federated_churn_model.h5"
         - name: PREPROCESSOR_PATH
-          value: "preprocessed_data/preprocessor.pkl"
+          value: "/app/model_data/preprocessed_data/preprocessor.pkl"
         - name: MLFLOW_TRACKING_URI
-          value: "http://host.minikube.internal:5000"
+          value: "http://mlflow-service:5000"
+        - name: LOG_LEVEL
+          value: "INFO"
         volumeMounts:
         - name: model-data
-          mountPath: /app/federated_data
+          mountPath: /app/model_data
           readOnly: true
-        - name: model-data
-          mountPath: /app/preprocessed_data
-          readOnly: true
-        - name: mlruns
-          mountPath: /home/immad/Documents/GitHub/MLOPs_project/mlruns
-          readOnly: true
+        
+        # More lenient probes with longer startup time
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          failureThreshold: 30
+          periodSeconds: 10
+          
         livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 3
+          
+        readinessProbe:
           httpGet:
             path: /health
             port: 8000
           initialDelaySeconds: 30
           periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 10
-          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
         resources:
           requests:
             memory: "1Gi"
@@ -62,20 +114,19 @@ spec:
           limits:
             memory: "2Gi"
             cpu: "1000m"
+      
       volumes:
       - name: model-data
         persistentVolumeClaim:
           claimName: model-data-pvc
-      - name: mlruns
-        hostPath:
-          path: /mlruns
-          type: Directory
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: churn-api-service
   namespace: churn-prediction
+  labels:
+    app: churn-api
 spec:
   selector:
     app: churn-api
@@ -83,4 +134,5 @@ spec:
   - port: 8000
     targetPort: 8000
     name: http
+    protocol: TCP
   type: LoadBalancer
