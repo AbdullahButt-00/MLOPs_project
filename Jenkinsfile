@@ -135,35 +135,36 @@ pipeline {
             }
         }
         
-        stage('Extract Model Metrics') {
-            steps {
-                echo '📊 Extracting model metrics...'
-                sh '''#!/bin/bash
-                    # Extract accuracy from metrics file
-                    if [ -f "federated_data/round_evaluation/per_round_metrics.csv" ]; then
-                        ACCURACY=$(tail -1 federated_data/round_evaluation/per_round_metrics.csv | cut -d',' -f3)
-                        echo "Model Accuracy: ${ACCURACY}"
+    stage('Extract Model Metrics') {
+        steps {
+            echo '📊 Extracting model metrics...'
+            sh '''#!/bin/bash
+                # Extract accuracy from metrics file
+                if [ -f "federated_data/round_evaluation/per_round_metrics.csv" ]; then
+                    ACCURACY=$(tail -1 federated_data/round_evaluation/per_round_metrics.csv | cut -d',' -f3)
+                    echo "Model Accuracy: ${ACCURACY}"
+                    
+                    # Check if accuracy meets threshold (0.75)
+                    if [ "${SKIP_TESTS}" = "false" ]; then
+                        # Use bc for float comparison (more reliable than Python in Jenkins)
+                        THRESHOLD="0.75"
+                        RESULT=$(echo "${ACCURACY} >= ${THRESHOLD}" | bc -l)
                         
-                        # Check if accuracy meets threshold (0.75)
-                        if [ "${SKIP_TESTS}" = "false" ]; then
-                            # Use heredoc to avoid substitution issues
-                            python3 - <<EOF
-        import sys
-        accuracy = float('${ACCURACY}')
-        if accuracy < 0.75:
-            print(f'❌ Model accuracy ({accuracy:.4f}) below threshold (0.75)')
-            sys.exit(1)
-        print(f'✓ Model accuracy ({accuracy:.4f}) acceptable')
-        EOF
+                        if [ "${RESULT}" -eq 1 ]; then
+                            echo "✓ Model accuracy (${ACCURACY}) acceptable"
                         else
-                            echo "⚠️  Skipping accuracy check (SKIP_TESTS=true)"
+                            echo "❌ Model accuracy (${ACCURACY}) below threshold (${THRESHOLD})"
+                            exit 1
                         fi
                     else
-                        echo "⚠️  Metrics file not found, skipping accuracy check"
+                        echo "⚠️  Skipping accuracy check (SKIP_TESTS=true)"
                     fi
-                '''
-            }
+                else
+                    echo "⚠️  Metrics file not found, skipping accuracy check"
+                fi
+            '''
         }
+    }
         
         stage('Push Docker Images to Minikube') {
             when {
