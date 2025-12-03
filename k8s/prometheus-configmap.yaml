@@ -21,6 +21,7 @@ data:
       - '/etc/prometheus/alert_rules.yml'
 
     scrape_configs:
+      # Scrape churn-prediction API pods
       - job_name: 'churn-prediction-api'
         scrape_interval: 5s
         kubernetes_sd_configs:
@@ -29,18 +30,26 @@ data:
               names:
                 - churn-prediction
         relabel_configs:
+          # Keep only pods with app=churn-api label
           - source_labels: [__meta_kubernetes_pod_label_app]
             action: keep
             regex: churn-api
+          # Set the address to pod IP and port 8000
           - source_labels: [__meta_kubernetes_pod_ip]
             action: replace
             target_label: __address__
             replacement: ${1}:8000
+          # Add pod name as label
           - source_labels: [__meta_kubernetes_pod_name]
             action: replace
             target_label: pod_name
+          # Add namespace as label
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: kubernetes_namespace
         metrics_path: '/metrics'
       
+      # Scrape Prometheus itself
       - job_name: 'prometheus'
         scrape_interval: 10s
         static_configs:
@@ -51,54 +60,80 @@ data:
 
   alert_rules.yml: |
     groups:
-      - name: data_drift_alerts
+      - name: churn_api_alerts
         interval: 30s
         rules:
+          # Data Drift Alert - Updated to work with actual metrics
           - alert: DataDriftDetected
-            expr: |
-              (
-                abs(feature_drift_score - feature_drift_baseline) > 0.3
-                and feature_drift_score > 0
-              )
-            for: 2m
+            expr: increase(data_drift_detected_total[5m]) > 0
+            for: 1m
             labels:
-              severity: critical
+              severity: warning
+              component: ml_model
               alert_type: data_drift
             annotations:
               summary: "Data drift detected in feature {{ $labels.feature }}"
-              description: "Feature {{ $labels.feature }} has drifted significantly. Current score: {{ $value }}, Baseline: {{ $labels.baseline }}"
+              description: "Feature {{ $labels.feature }} has exhibited data drift. Model retraining may be required."
               feature: "{{ $labels.feature }}"
-              drift_score: "{{ $value }}"
-
-          - alert: HighPredictionLatency
-            expr: |
-              histogram_quantile(0.95, rate(prediction_latency_seconds_bucket[5m])) > 0.5
-            for: 5m
+              
+          # High Drift Score Alert
+          - alert: HighDriftScore
+            expr: data_drift_score > 0.3
+            for: 2m
             labels:
               severity: warning
-              alert_type: performance
+              component: ml_model
+              alert_type: data_drift
             annotations:
-              summary: "High prediction latency detected"
-              description: "95th percentile latency is {{ $value }}s, exceeding 500ms threshold"
-
+              summary: "High drift score in feature {{ $labels.feature }}"
+              description: "Feature {{ $labels.feature }} has drift score {{ $value }}. Monitor closely."
+              feature: "{{ $labels.feature }}"
+              drift_score: "{{ $value }}"
+      
+          # Model Performance Degradation (based on error rate)
           - alert: HighErrorRate
-            expr: |
-              rate(prediction_errors_total[5m]) > 0.05
-            for: 5m
+            expr: rate(prediction_errors_total[5m]) > 0.05
+            for: 3m
             labels:
               severity: critical
+              component: api
               alert_type: errors
             annotations:
               summary: "High prediction error rate"
-              description: "Error rate is {{ $value }} errors/sec"
-
-          - alert: ModelAccuracyDrop
-            expr: |
-              model_accuracy < 0.75
+              description: "Error rate is {{ $value }} errors/sec. Check model health."
+      
+          # High Latency Alert
+          - alert: HighPredictionLatency
+            expr: histogram_quantile(0.95, rate(prediction_latency_seconds_bucket[5m])) > 0.5
+            for: 5m
+            labels:
+              severity: warning
+              component: api
+              alert_type: performance
+            annotations:
+              summary: "High prediction latency detected"
+              description: "95th percentile latency is {{ $value }}s"
+              
+          # Low Prediction Rate (potential issue)
+          - alert: LowPredictionRate
+            expr: rate(predictions_total[5m]) < 0.01
             for: 10m
             labels:
               severity: warning
-              alert_type: model_performance
+              component: api
+              alert_type: performance
             annotations:
-              summary: "Model accuracy has dropped"
-              description: "Current model accuracy is {{ $value }}, below 75% threshold"
+              summary: "Low prediction rate detected"
+              description: "Prediction rate is {{ $value }} req/s, which is unusually low"
+              
+          # API Down
+          - alert: APIDown
+            expr: up{job="churn-prediction-api"} == 0
+            for: 2m
+            labels:
+              severity: critical
+              component: api
+              alert_type: availability
+            annotations:
+              summary: "Churn Prediction API is down"
+              description: "The API has been unreachable for more than 2 minutes"
