@@ -138,22 +138,23 @@ pipeline {
         stage('Extract Model Metrics') {
             steps {
                 echo '📊 Extracting model metrics...'
-                sh '''
+                sh '''#!/bin/bash
                     # Extract accuracy from metrics file
                     if [ -f "federated_data/round_evaluation/per_round_metrics.csv" ]; then
                         ACCURACY=$(tail -1 federated_data/round_evaluation/per_round_metrics.csv | cut -d',' -f3)
                         echo "Model Accuracy: ${ACCURACY}"
                         
                         # Check if accuracy meets threshold (0.75)
-                        if [ "${params.SKIP_TESTS}" = "false" ]; then
-                            docker run --rm python:3.9-slim python -c "
-import sys
-accuracy = float('${ACCURACY}')
-if accuracy < 0.75:
-    print('❌ Model accuracy (${ACCURACY}) below threshold (0.75)')
-    sys.exit(1)
-print('✓ Model accuracy acceptable')
-"
+                        if [ "${SKIP_TESTS}" = "false" ]; then
+                            # Use heredoc to avoid substitution issues
+                            python3 - <<EOF
+        import sys
+        accuracy = float('${ACCURACY}')
+        if accuracy < 0.75:
+            print(f'❌ Model accuracy ({accuracy:.4f}) below threshold (0.75)')
+            sys.exit(1)
+        print(f'✓ Model accuracy ({accuracy:.4f}) acceptable')
+        EOF
                         else
                             echo "⚠️  Skipping accuracy check (SKIP_TESTS=true)"
                         fi
