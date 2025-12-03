@@ -12,6 +12,15 @@ data:
         monitor: 'churn-prediction-monitor'
         environment: 'production'
 
+    alerting:
+      alertmanagers:
+      - static_configs:
+        - targets:
+          - alertmanager-service:9093
+
+    rule_files:
+      - '/etc/prometheus/alert_rules.yml'
+
     scrape_configs:
       # Scrape churn-prediction API pods
       - job_name: 'churn-prediction-api'
@@ -48,7 +57,6 @@ data:
           - targets: ['localhost:9090']
             labels:
               service: 'prometheus'
-<<<<<<< HEAD
               component: 'monitoring'
 
   alert_rules.yml: |
@@ -56,7 +64,7 @@ data:
       - name: churn_api_alerts
         interval: 30s
         rules:
-          # Data Drift Alert - Updated to work with actual metrics
+          # Data Drift Alert
           - alert: DataDriftDetected
             expr: increase(data_drift_detected_total[5m]) > 0
             for: 1m
@@ -83,7 +91,7 @@ data:
               feature: "{{ $labels.feature }}"
               drift_score: "{{ $value }}"
       
-          # Model Performance Degradation (based on error rate)
+          # High Error Rate
           - alert: HighErrorRate
             expr: rate(prediction_errors_total[5m]) > 0.05
             for: 3m
@@ -95,7 +103,7 @@ data:
               summary: "High prediction error rate"
               description: "Error rate is {{ $value }} errors/sec. Check model health."
       
-          # High Latency Alert
+          # High Latency
           - alert: HighPredictionLatency
             expr: histogram_quantile(0.95, rate(prediction_latency_seconds_bucket[5m])) > 0.5
             for: 5m
@@ -107,7 +115,7 @@ data:
               summary: "High prediction latency detected"
               description: "95th percentile latency is {{ $value }}s"
               
-          # Low Prediction Rate (potential issue)
+          # Low Prediction Rate
           - alert: LowPredictionRate
             expr: rate(predictions_total[5m]) < 0.01
             for: 10m
@@ -130,6 +138,3 @@ data:
             annotations:
               summary: "Churn Prediction API is down"
               description: "The API has been unreachable for more than 2 minutes"
-=======
-              component: 'monitoring'
->>>>>>> parent of 9400a4d (Created CI/CD pipeline)

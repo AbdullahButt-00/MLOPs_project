@@ -71,7 +71,6 @@ spec:
         - name: MODEL_PATH
           value: "/app/model_data/federated_data/federated_churn_model.h5"
         - name: PREPROCESSOR_PATH
-<<<<<<< HEAD
           value: "/app/model_data/preprocessed_data/preprocessor.pkl"
         - name: MLFLOW_TRACKING_URI
           value: "http://mlflow-service:5000"
@@ -90,16 +89,6 @@ spec:
           failureThreshold: 30
           periodSeconds: 10
           
-=======
-          value: "preprocessed_data/preprocessor.pkl"
-        volumeMounts:
-        - name: model-data
-          mountPath: /app/federated_data
-          readOnly: true
-        - name: model-data
-          mountPath: /app/preprocessed_data
-          readOnly: true
->>>>>>> parent of 9400a4d (Created CI/CD pipeline)
         livenessProbe:
           httpGet:
             path: /health

@@ -163,6 +163,29 @@ fi
         '''
     }
 }
+
+        stage('Verify Minikube') {
+            steps {
+                echo '🔍 Verifying Minikube is running...'
+                sh '''
+        # Check if minikube is running
+        if ! minikube status > /dev/null 2>&1; then
+            echo "⚠️  Minikube is not running. Starting minikube..."
+            minikube start
+            sleep 10
+        fi
+
+        # Verify minikube is accessible
+        if ! kubectl get nodes > /dev/null 2>&1; then
+            echo "❌ Cannot connect to Kubernetes cluster"
+            exit 1
+        fi
+
+        echo "✓ Minikube is running and accessible"
+        kubectl get nodes
+                '''
+            }
+        }
         
         stage('Push Docker Images to Minikube') {
             when {
