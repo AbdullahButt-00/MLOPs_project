@@ -135,36 +135,34 @@ pipeline {
             }
         }
         
-    stage('Extract Model Metrics') {
-        steps {
-            echo '📊 Extracting model metrics...'
-            sh '''#!/bin/bash
-                # Extract accuracy from metrics file
-                if [ -f "federated_data/round_evaluation/per_round_metrics.csv" ]; then
-                    ACCURACY=$(tail -1 federated_data/round_evaluation/per_round_metrics.csv | cut -d',' -f3)
-                    echo "Model Accuracy: ${ACCURACY}"
-                    
-                    # Check if accuracy meets threshold (0.75)
-                    if [ "${SKIP_TESTS}" = "false" ]; then
-                        # Use bc for float comparison (more reliable than Python in Jenkins)
-                        THRESHOLD="0.75"
-                        RESULT=$(echo "${ACCURACY} >= ${THRESHOLD}" | bc -l)
-                        
-                        if [ "${RESULT}" -eq 1 ]; then
-                            echo "✓ Model accuracy (${ACCURACY}) acceptable"
-                        else
-                            echo "❌ Model accuracy (${ACCURACY}) below threshold (${THRESHOLD})"
-                            exit 1
-                        fi
-                    else
-                        echo "⚠️  Skipping accuracy check (SKIP_TESTS=true)"
-                    fi
-                else
-                    echo "⚠️  Metrics file not found, skipping accuracy check"
-                fi
-            '''
-        }
+stage('Extract Model Metrics') {
+    steps {
+        echo '📊 Extracting model metrics...'
+        sh '''#!/bin/bash
+# Extract accuracy from metrics file
+if [ -f "federated_data/round_evaluation/per_round_metrics.csv" ]; then
+    ACCURACY=$(tail -1 federated_data/round_evaluation/per_round_metrics.csv | cut -d',' -f3)
+    echo "Model Accuracy: ${ACCURACY}"
+    
+    # Check if accuracy meets threshold (0.75)
+    if [ "${SKIP_TESTS}" = "false" ]; then
+        # Use bc for float comparison (avoids Python)
+        THRESHOLD="0.75"
+        if [ $(echo "${ACCURACY} < ${THRESHOLD}" | bc -l) -eq 1 ]; then
+            echo "❌ Model accuracy (${ACCURACY}) below threshold (${THRESHOLD})"
+            exit 1
+        else
+            echo "✓ Model accuracy (${ACCURACY}) acceptable"
+        fi
+    else
+        echo "⚠️  Skipping accuracy check (SKIP_TESTS=true)"
+    fi
+else
+    echo "⚠️  Metrics file not found, skipping accuracy check"
+fi
+        '''
     }
+}
         
         stage('Push Docker Images to Minikube') {
             when {
