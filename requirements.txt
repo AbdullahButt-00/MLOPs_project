@@ -1,5 +1,5 @@
 tensorflow==2.14.0
-tensorflow-federated==0.56.0
+tensorflow-federated==0.72.0
 blinker<=1.4
 numpy~=1.25
 scipy~=1.9.3
