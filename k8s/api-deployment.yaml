@@ -61,8 +61,8 @@ spec:
       
       containers:
       - name: api
-        image: your-registry/churn-serving:latest  # Update with your image
-        imagePullPolicy: Always
+        image: churn-serving:latest  # Update with your image
+        imagePullPolicy: Never
         ports:
         - containerPort: 8000
           name: http
